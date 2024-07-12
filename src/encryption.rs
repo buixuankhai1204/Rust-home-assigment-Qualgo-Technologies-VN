@@ -17,33 +17,41 @@ pub enum ESignatureResponse {
     PublicKey(RsaPublicKey),
 }
 
-pub fn get_correct_value_key(key_pem: &str, type_of_key: i8) -> Result<ESignatureResponse, &'static str> {
+pub enum ETypeOfKey {
+    Private,
+    Public,
+    Sign,
+    Verify
+}
+
+pub fn get_correct_value_key(key_pem: &str, type_of_key: ETypeOfKey) -> Result<ESignatureResponse, &'static str> {
+
+    //Get key from file pem
     match type_of_key {
-        0 => {
+        ETypeOfKey::Sign => {
             let signing_key = SigningKey::from_pkcs1_pem(&key_pem).expect("Can not get Singing key");
             return Ok(
                 ESignatureResponse::SigningKey(signing_key)
             );
         }
-        1 => {
+        ETypeOfKey::Verify => {
             let verifying_key = VerifyingKey::from_pkcs1_pem(&key_pem).expect("Can not parse to signingKey");
             return Ok(
                 ESignatureResponse::VerifyingKey(verifying_key)
             );
         }
-        2 => {
+        ETypeOfKey::Private => {
             let private_key = RsaPrivateKey::from_pkcs1_pem(&key_pem).expect("Failed to parse key");
             return Ok(
                 ESignatureResponse::PrivateKey(private_key)
             );
         }
-        3 => {
+        ETypeOfKey::Public => {
             let public_key = RsaPublicKey::from_pkcs1_pem(&key_pem).expect("Failed to parse key");
             return Ok(
                 ESignatureResponse::PublicKey(public_key)
             );
         }
-        _ => Err("Can not get data from file")
     }
 }
 
@@ -52,14 +60,15 @@ pub fn generate_keys() {
     let bits = 2048;
     let private_key = RsaPrivateKey::new(&mut rng, bits).expect("Failed to generate a key");
     let public_key = RsaPublicKey::from(&private_key);
-    let signing_key = SigningKey::<Sha256>::new(private_key.clone());
+    let signing_key = SigningKey::<Sha256>::new(private_key.to_owned());
     let verifying_key = &signing_key.verifying_key();
 
-    let mut priv_file = File::create("private_key.pem").expect("Failed to create private key file");
-    priv_file.write_all(&private_key.to_pkcs1_pem(LineEnding::CRLF).expect("Failed to write key").as_bytes()).expect("Failed to write file");
+    // store keys
+    let mut private_file = File::create("private_key.pem").expect("Failed to create private key file");
+    private_file.write_all(&private_key.to_pkcs1_pem(LineEnding::CRLF).expect("Failed to write key").as_bytes()).expect("Failed to write file");
 
-    let mut pub_file = File::create("public_key.pem").expect("Failed to create public key file");
-    pub_file.write_all(&public_key.to_pkcs1_pem(LineEnding::CRLF).expect("Failed to write key").as_bytes()).expect("Failed to write file");
+    let mut public_file = File::create("public_key.pem").expect("Failed to create public key file");
+    public_file.write_all(&public_key.to_pkcs1_pem(LineEnding::CRLF).expect("Failed to write key").as_bytes()).expect("Failed to write file");
 
     let mut sign_file = File::create("sign_key.pem").expect("Fail to create signing file");
     sign_file.write_all(signing_key.to_pkcs1_pem(LineEnding::CRLF).expect("Can not convert this key").as_bytes()).expect("Failed to write file");
@@ -68,11 +77,11 @@ pub fn generate_keys() {
     verify_file.write_all(verifying_key.to_pkcs1_pem(LineEnding::CRLF).expect("Can not convert this key").as_bytes()).expect("Failed to write file");
 
 
-    println!("Keys generated and saved to private_key.pem and public_key.pem");
+    println!("Keys generated and saved to private_key.pem, public_key.pem, sign_key.pem and verify_key.pem");
 }
 
 pub fn encrypt(public_key_pem: &str, plaintext: &str) -> Result<String, &'static str> {
-    let public_key = get_correct_value_key(public_key_pem, 3).expect("Can not get private key");
+    let public_key = get_correct_value_key(public_key_pem, ETypeOfKey::Public).expect("Can not get private key");
     let mut rng = OsRng;
     return match public_key {
         ESignatureResponse::PublicKey(key) => {
@@ -84,7 +93,7 @@ pub fn encrypt(public_key_pem: &str, plaintext: &str) -> Result<String, &'static
 }
 
 pub fn decrypt(private_key_pem: &str, encrypted_message: &str) -> Result<String, &'static str> {
-    let private_key = get_correct_value_key(private_key_pem, 2).expect("Can not get private key");
+    let private_key = get_correct_value_key(private_key_pem, ETypeOfKey::Private).expect("Can not get private key");
     return match private_key {
         ESignatureResponse::PrivateKey(key) => {
             let decrypted = key.decrypt(Pkcs1v15Encrypt, &BASE64_STANDARD.decode(&encrypted_message).expect("Can not decrypt data")).expect("Failed to decrypt");
@@ -96,7 +105,7 @@ pub fn decrypt(private_key_pem: &str, encrypted_message: &str) -> Result<String,
 }
 
 pub fn sign(sign_key_pem: &str, message: &str) -> Result<String, &'static str> {
-    let private_key = get_correct_value_key(sign_key_pem, 0).expect("Can not get private key");
+    let private_key = get_correct_value_key(sign_key_pem, ETypeOfKey::Sign).expect("Can not get private key");
 
     let mut rng = rand::thread_rng();
     match private_key {
@@ -109,7 +118,7 @@ pub fn sign(sign_key_pem: &str, message: &str) -> Result<String, &'static str> {
 }
 
 pub fn verify(verify_key_pem: &str, message: &str, signature: &str) -> Result<bool, &'static str> {
-    let verify_key = get_correct_value_key(verify_key_pem, 1).expect("Can not get verify key");
+    let verify_key = get_correct_value_key(verify_key_pem, ETypeOfKey::Verify).expect("Can not get verify key");
     return match verify_key {
         ESignatureResponse::VerifyingKey(key) =>
             {
