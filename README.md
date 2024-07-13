@@ -17,6 +17,6 @@ For advance task:
 - Task 2: **Build sdk for each platform**
 
 
-    cargo build --target aarch64-linux-android --release
-    cargo build --target aarch64-apple-ios --release
-    cargo build --target x86_64-pc-windows-gnu --release
+        cargo build --target aarch64-linux-android --release
+        cargo build --target aarch64-apple-ios --release
+        cargo build --target x86_64-pc-windows-gnu --release
